@@ -33,13 +33,20 @@
 git clone https://github.com/dingzhenchunyilang/review-cards.git /opt/flashcards
 cd /opt/flashcards
 
-# 2) 配置：只填用户名和密码
+# 2) 配置：不用编辑器，直接生成密码并写文件
 cp .env.example .env
-vi .env                     # 填 APP_USER / APP_PASSWORD
+PASS=$(openssl rand -hex 16)          # 32 位纯字母数字，不会有转义问题
+printf 'APP_USER=ethan\nAPP_PASSWORD=%s\nAPP_BIND=0.0.0.0:8000\n' "$PASS" > .env
+echo "登录密码: $PASS"                # 记下来，登录时要用
+cat .env                              # 确认写入正确
 
 # 3) 起
 docker compose up -d --build
 ```
+
+> 想手动改 `.env` 也行（`vi .env` 或 `nano .env`）。不会用 Vim 的话就照上面来，
+> 或者用 `nano`（底部有快捷键提示，`Ctrl+O` 保存、`Ctrl+X` 退出）。
+> 卡在 Vim 里出不来：按 `Esc` 然后输入 `:q!` 回车。
 
 浏览器打开 `http://服务器IP:8000`，会弹出登录框。
 
