@@ -1,13 +1,18 @@
-# 单机部署：Caddy 负责 HTTPS + 反向代理，app 容器只在内网暴露 8000。
+# 单机部署。
 #
-#   docker compose up -d --build      # 启动 / 更新
-#   docker compose logs -f app        # 看日志
-#   docker compose down               # 停止（数据留在 ./data）
+# 默认只跑 app：把容器 8000 端口开到宿主机，用 http://服务器IP:8000 访问。
+# 想上 HTTPS（需要域名）再加 Caddy：
 #
-# 需要的 .env（和本文件同目录）：
-#   APP_DOMAIN=cards.example.com
+#   docker compose up -d --build                 # 只起 app（HTTP，IP 直连）
+#   docker compose --profile tls up -d --build   # app + Caddy（HTTPS，需 APP_DOMAIN）
+#
+#   docker compose logs -f app      # 看日志
+#   docker compose down             # 停止（数据留在 ./data）
+#
+# .env（和本文件同目录）至少要有：
 #   APP_USER=你的用户名
 #   APP_PASSWORD=你的密码
+#
 # 日志轮转。Docker 默认的 json-file 驱动不设上限，长期跑会把磁盘写满。
 x-logging: &default-logging
   driver: json-file
@@ -24,11 +29,15 @@ services:
     volumes:
       # 数据库就是这一个文件，备份 = 复制 ./data
       - ./data:/app/data
-    expose:
-      - "8000"
-    # 注意：没有 ports，所以外界只能经 Caddy 访问，不能直连 8000。
+    ports:
+      # 默认对全网开放 8000。启用 Caddy 时在 .env 里设 APP_BIND=127.0.0.1:8000，
+      # 这样只有 Caddy 连得到 app，8000 不再对外暴露。
+      - "${APP_BIND:-0.0.0.0:8000}:8000"
 
   caddy:
+    # 加了 profile，只有 `--profile tls` 才会启动这个服务。
+    # 所以没域名时 `docker compose up -d` 不会去碰它，也不会因为缺 APP_DOMAIN 报错。
+    profiles: ["tls"]
     image: caddy:2-alpine
     restart: unless-stopped
     logging: *default-logging
@@ -36,7 +45,7 @@ services:
       - "80:80"
       - "443:443"
     environment:
-      APP_DOMAIN: ${APP_DOMAIN:?请在 .env 里设置 APP_DOMAIN}
+      APP_DOMAIN: ${APP_DOMAIN:-localhost}
     volumes:
       - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
       - caddy_data:/data

@@ -6,9 +6,13 @@
 检查 `frontend/dist/`，如果存在就**由 FastAPI 自己托管前端**：
 
 ```
+# 有域名（A-2 / 方案 B）
 浏览器 ──HTTPS──> Caddy ──> uvicorn (8000)
                               ├── /api/*  → FastAPI 路由
                               └── 其它路径 → frontend/dist（SPA，含前端路由回退）
+
+# 只有 IP（A-1）：没有 Caddy，浏览器直连
+浏览器 ──HTTP──> uvicorn (8000)   ← 同上
 ```
 
 好处：**同源**，所以不需要配 CORS、不需要 nginx 反代规则、一个进程一个端口。
@@ -22,27 +26,52 @@
 
 前提：服务器装了 Docker + Compose 插件，并且有公网 IP。
 
-```bash
-# 1) 拿到代码
-git clone <你的仓库地址> /opt/flashcards && cd /opt/flashcards
+### A-1　只有 IP、没有域名（最快）
 
-# 2) 配置
+```bash
+# 1) 拿到代码（仓库是公开的，不需要登录）
+git clone https://github.com/dingzhenchunyilang/review-cards.git /opt/flashcards
+cd /opt/flashcards
+
+# 2) 配置：只填用户名和密码
 cp .env.example .env
-vi .env        # 填 APP_DOMAIN / APP_USER / APP_PASSWORD
+vi .env                     # 填 APP_USER / APP_PASSWORD
 
 # 3) 起
 docker compose up -d --build
 ```
 
-打开 `https://你的域名` 即可。Caddy 会自动申请证书（首次约需几十秒）。
+浏览器打开 `http://服务器IP:8000`，会弹出登录框。
 
-`.env` 里三项：
+> 这条路上密码走的是**明文 HTTP**。自己一个人用问题不大；想加密的话，
+> 要么照 A-2 加个域名，要么看下面「没有域名怎么办」里的 sslip.io 方案。
 
-| 变量 | 说明 |
-|---|---|
-| `APP_DOMAIN` | 你的域名，必须已解析到这台服务器，且 80/443 开放 |
-| `APP_USER` | 登录用户名 |
-| `APP_PASSWORD` | 登录密码，**建议长一点**（这是全站唯一的一道锁） |
+### A-2　有域名、要 HTTPS
+
+`.env` 里改两处：
+
+```ini
+APP_DOMAIN=cards.example.com     # 必须已解析到这台服务器
+APP_BIND=127.0.0.1:8000          # 8000 不再对外暴露，只留给 Caddy
+```
+
+然后带上 `tls` profile 启动：
+
+```bash
+docker compose --profile tls up -d --build
+```
+
+打开 `https://你的域名`。Caddy 自动申请证书，首次约几十秒。
+（80/443 需要对外放行 —— Caddy 要用 80 端口做 ACME 校验。）
+
+### `.env` 变量
+
+| 变量 | 必填 | 说明 |
+|---|---|---|
+| `APP_USER` | 是 | 登录用户名 |
+| `APP_PASSWORD` | 是 | 登录密码，**建议长一点**（这是全站唯一的一道锁） |
+| `APP_BIND` | 否 | 默认 `0.0.0.0:8000`；走 Caddy 时改成 `127.0.0.1:8000` |
+| `APP_DOMAIN` | 否 | 只有走 Caddy 申请证书时才需要 |
 
 > `APP_USER` 和 `APP_PASSWORD` 两个都填才会开启登录。**留空 = 谁都能访问。**
 
@@ -78,14 +107,27 @@ docker compose exec app python -m app.seed
 
 ### 没有域名怎么办
 
-Let's Encrypt 不给裸 IP 签证书。三选一：
+Let's Encrypt 不给裸 IP 签证书。四选一：
 
-1. **买个便宜域名**（最省心，几十块一年），解析到服务器 IP 即可。
-2. **自签证书**：把 `deploy/Caddyfile` 里的 `# tls internal` 取消注释，
+1. **就用 HTTP + `IP:8000`**（就是 A-1，零配置）。密码明文传输，自己用够了。
+2. **sslip.io 白嫖一个域名**（不花钱也能拿到真证书）：`sslip.io` 提供通配 DNS，
+   `1.2.3.4.sslip.io` 会自动解析到 `1.2.3.4`。所以：
+
+   ```ini
+   APP_DOMAIN=1.2.3.4.sslip.io      # 换成你的服务器 IP
+   APP_BIND=127.0.0.1:8000
+   ```
+
+   ```bash
+   docker compose --profile tls up -d --build
+   ```
+
+   访问 `https://1.2.3.4.sslip.io`，证书是合法签发的。
+   缺点：依赖第三方 DNS（偶尔抽风），且 IP 暴露在域名里。
+3. **自签证书**：把 `deploy/Caddyfile` 里的 `# tls internal` 取消注释，
    然后把 `APP_DOMAIN` 填成服务器 IP。浏览器会提示证书不受信任，需要手动点继续。
-3. **Cloudflare Tunnel / Tailscale**（推荐给「只有 IP」的情况）：
-   不用开放任何端口，也不用证书，直接把这台机器接进私有网络。
-   这时可以去掉 compose 里的 `caddy` 服务，只跑 `app`。
+4. **Cloudflare Tunnel / Tailscale**（最安全）：不用开放任何端口，也不用证书。
+   这时 `caddy` 服务根本不会启动（它在 `tls` profile 里），只跑 `app` 即可。
 
 ---
 
@@ -205,6 +247,9 @@ docker compose logs -f caddy        # 证书 / 反代问题看这里
 curl -i http://127.0.0.1:8000/api/health   # 容器内健康检查（不鉴权）
 ```
 
+- **打开是「无法访问此网站」/ 连接超时**：端口没放开。要同时检查两处 ——
+  服务器防火墙（`sudo ufw allow 8000/tcp`）和云厂商控制台的**安全组**入站规则。
+  再确认容器真的起来了：`docker compose ps`。
 - **打开是 502**：Caddy 连不上 app。先确认 `app` 容器是 running，再看它的日志。
 - **登录框反复弹**：`APP_USER` / `APP_PASSWORD` 没设或设错了。注意 `.env` 改完要
   `docker compose up -d` 才会重新读取。
