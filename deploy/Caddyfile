@@ -1,0 +1,24 @@
+# Caddy 在这里终结 TLS，然后反代到 app 容器。
+#
+# ⚠️ 这份配置只给 docker-compose 用：{$APP_DOMAIN} 是 compose 注入的环境变量，
+#    app:8000 也是 compose 内部的服务名。用 systemd 直接跑 Caddy 的话别用这份，
+#    照 DEPLOY.md「方案 B」里那段重新写一份（域名写死、反代写 127.0.0.1:8000）。
+#
+# APP_DOMAIN 从 .env 读取。填一个你真正拥有的域名（例如 cards.example.com），
+# Caddy 会自动申请 Let's Encrypt 证书 —— 前提是该域名已经解析到这台服务器的公网 IP，
+# 且 80 / 443 端口对外开放。
+#
+# 没有域名？把下面的 `tls internal` 取消注释，改用自签证书（浏览器会报警告）。
+# 更推荐的做法是套一层 Cloudflare Tunnel 或 Tailscale，不用暴露端口。
+{$APP_DOMAIN} {
+	encode zstd gzip
+
+	header {
+		X-Content-Type-Options nosniff
+		X-Frame-Options DENY
+		Referrer-Policy no-referrer
+	}
+
+	# tls internal
+	reverse_proxy app:8000
+}

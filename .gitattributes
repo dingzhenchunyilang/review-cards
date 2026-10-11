@@ -1,0 +1,12 @@
+# Deploy target is Linux (Docker / systemd) — normalise text to LF everywhere.
+# Keeps CRLF out of the repo so shell scripts and systemd units stay valid.
+* text=auto eol=lf
+
+# Binary assets must never be line-ending converted.
+*.png binary
+*.jpg binary
+*.ico binary
+*.woff binary
+*.woff2 binary
+*.db binary
+*.sqlite3 binary

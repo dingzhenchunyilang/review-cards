@@ -1,0 +1,32 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+
+# Data (SQLite files are local, back them up separately)
+data/*.db
+data/*.sqlite3
+
+# Deployment secrets — holds APP_PASSWORD, never commit this
+.env
+
+# Node
+node_modules/
+dist/
+*.local
+
+# Build artifacts
+*.tsbuildinfo
+vite.config.ts.timestamp-*.mjs
+
+# Editors / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Agent working data (notes + verification screenshots) — stays on disk, not in VCS
+.workbuddy-ai/
+cdp-shot.png

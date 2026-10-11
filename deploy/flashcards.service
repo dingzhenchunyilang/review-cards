@@ -1,0 +1,22 @@
+[Unit]
+Description=知识卡片复习工具 (FastAPI + SQLite)
+After=network.target
+
+[Service]
+Type=simple
+User=flashcards
+Group=flashcards
+WorkingDirectory=/opt/flashcards/backend
+EnvironmentFile=/opt/flashcards/.env
+ExecStart=/opt/flashcards/backend/.venv/bin/uvicorn app.main:app --host 127.0.0.1 --port 8000
+Restart=always
+RestartSec=3
+
+# 基本加固
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+ProtectHome=true
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,49 @@
+# 单机部署：Caddy 负责 HTTPS + 反向代理，app 容器只在内网暴露 8000。
+#
+#   docker compose up -d --build      # 启动 / 更新
+#   docker compose logs -f app        # 看日志
+#   docker compose down               # 停止（数据留在 ./data）
+#
+# 需要的 .env（和本文件同目录）：
+#   APP_DOMAIN=cards.example.com
+#   APP_USER=你的用户名
+#   APP_PASSWORD=你的密码
+# 日志轮转。Docker 默认的 json-file 驱动不设上限，长期跑会把磁盘写满。
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
+
+services:
+  app:
+    build: .
+    restart: unless-stopped
+    env_file: .env
+    logging: *default-logging
+    volumes:
+      # 数据库就是这一个文件，备份 = 复制 ./data
+      - ./data:/app/data
+    expose:
+      - "8000"
+    # 注意：没有 ports，所以外界只能经 Caddy 访问，不能直连 8000。
+
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    logging: *default-logging
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      APP_DOMAIN: ${APP_DOMAIN:?请在 .env 里设置 APP_DOMAIN}
+    volumes:
+      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - app
+
+volumes:
+  caddy_data:
+  caddy_config:

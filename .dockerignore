@@ -1,0 +1,18 @@
+.git
+.gitignore
+.workbuddy-ai
+
+# Never ship local build output or dependencies — the frontend is rebuilt inside
+# the image, and node_modules would blow up the build context.
+**/node_modules
+frontend/dist
+**/.venv
+**/__pycache__
+**/*.pyc
+**/*.pyo
+
+# The database is a runtime volume, not image content.
+data
+
+# Local deployment secrets.
+.env
